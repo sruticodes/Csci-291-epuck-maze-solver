@@ -1,0 +1,88 @@
+#include <webots/robot.h>
+#include <webots/motor.h>
+#include <webots/distance_sensor.h>
+#include <stdio.h>
+
+#define TIME_STEP 32
+#define MAX_SPEED 6.28
+
+// Sensors and motors
+WbDeviceTag left_motor, right_motor;
+WbDeviceTag ps[8];  // 8 proximity sensors
+
+// Initializing devices
+void initialize_devices() {
+  left_motor = wb_robot_get_device("left wheel motor");
+  right_motor = wb_robot_get_device("right wheel motor");
+  wb_motor_set_position(left_motor, INFINITY);
+  wb_motor_set_position(right_motor, INFINITY);
+
+  // Initializing proximity sensors
+  for (int i = 0; i < 8; i++) {
+    char ps_name[4];
+    sprintf(ps_name, "ps%d", i);
+    ps[i] = wb_robot_get_device(ps_name);
+    wb_distance_sensor_enable(ps[i], TIME_STEP);
+  }
+}
+
+// Processing sensors and controlling the robot
+void process_sensors_and_control() {
+  // Gets proximity sensor values
+  int ps_values[8];
+  for (int i = 0; i < 8; i++) {
+    ps_values[i] = (int)wb_distance_sensor_get_value(ps[i]);
+  }
+
+  // Movement logic based on proximity sensors
+  int left_speed = (int)(MAX_SPEED);
+  int right_speed = (int)(MAX_SPEED);
+
+  bool front_obstacle = ps_values[0] > 80.0 || ps_values[7] > 80.0;
+  bool side_left = ps_values[5] > 80.0;
+  bool side_right = ps_values[2] > 80.0;
+
+  // Obstacle detection and avoidance logic
+  if (front_obstacle) {
+    if (side_left && side_right) {
+      left_speed = (int)(-0.5 * MAX_SPEED);
+      right_speed = (int)(-0.5 * MAX_SPEED);  // Go backward
+    } else if (side_left) {
+      left_speed = (int)(MAX_SPEED);
+      right_speed = (int)(0.1 * MAX_SPEED);  // Turn right
+    } else if (side_right) {
+      left_speed = (int)(0.1 * MAX_SPEED);
+      right_speed = (int)(MAX_SPEED);  // Turn left
+    } else {
+      left_speed = (int)(MAX_SPEED);
+      right_speed = (int)(-0.1 * MAX_SPEED);  // Turn slightly right
+    }
+  } else {
+    if (side_left && !side_right) {
+      left_speed = (int)(0.1 * MAX_SPEED);
+      right_speed = (int)(MAX_SPEED);  // Turn right
+    } else if (!side_left && !side_right) {
+      left_speed = (int)(0.5 * MAX_SPEED);
+      right_speed = (int)(0.5 * MAX_SPEED);  // Move forward
+    } else if (!side_left && side_right) {
+      left_speed = (int)(0.1 * MAX_SPEED);
+      right_speed = (int)(MAX_SPEED);  // Turn left
+    }
+  }
+
+  // Set motor speeds
+  wb_motor_set_velocity(left_motor, left_speed);
+  wb_motor_set_velocity(right_motor, right_speed);
+}
+
+int main() {
+  wb_robot_init();
+  initialize_devices();
+
+  while (wb_robot_step(TIME_STEP) != -1) {
+    process_sensors_and_control();
+  }
+
+  wb_robot_cleanup();
+  return 0;
+}
